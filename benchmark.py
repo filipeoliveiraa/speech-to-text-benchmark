@@ -11,15 +11,20 @@ import editdistance
 from dataset import *
 from engine import *
 
-WorkerResult = namedtuple('WorkerResult', ['num_errors', 'num_words', 'rtf'])
+import mlflow
 
+os.environ.get('MLFLOW_TRACKING_URI')
+mlflow.set_tracking_uri('/data/mlflow')
+
+WorkerResult = namedtuple('WorkerResult', ['num_errors', 'num_words', 'rtf'])
 
 def process(
         engine: Engines,
         engine_params: Dict[str, Any],
         dataset: Datasets,
         dataset_folder: str,
-        indices: Sequence[int]) -> WorkerResult:
+        indices: Sequence[int],
+        use_cache: bool) -> WorkerResult:
     engine = Engine.create(engine, **engine_params)
     dataset = Dataset.create(dataset, folder=dataset_folder)
 
@@ -28,7 +33,7 @@ def process(
     for index in indices:
         audio_path, ref_transcript = dataset.get(index)
 
-        transcript = engine.transcribe(audio_path)
+        transcript = engine.transcribe(audio_path,use_cache)
 
         ref_words = ref_transcript.strip('\n ').lower().split()
         words = transcript.strip('\n ').lower().split()
@@ -55,14 +60,28 @@ def main():
     parser.add_argument('--picovoice-access-key')
     parser.add_argument('--watson-speech-to-text-api-key')
     parser.add_argument('--watson-speech-to-text-url')
+    parser.add_argument('--whisper')
+    parser.add_argument('--whisper-language')
     parser.add_argument('--num-examples', type=int, default=None)
     parser.add_argument('--num-workers', type=int, default=os.cpu_count())
+    parser.add_argument('--use-cache', type=int, default= 1, choices=[0,1])
     args = parser.parse_args()
 
     args.dataset = Datasets[args.dataset]
     args.engine = Engines[args.engine]
-
+    args.use_cache = False if args.use_cache == 0 else True
     dataset = Dataset.create(args.dataset, folder=args.dataset_folder)
+    ##mlflow logs
+    try:
+        exp_id = mlflow.create_experiment(f"{args.dataset}_{args.dataset_folder}_{args.engine}")
+        experiment = mlflow.get_experiment(exp_id)
+    except:
+        experiment = mlflow.get_experiment_by_name(f"{args.dataset}_{args.dataset_folder}_{args.engine}")
+    mlflow.set_experiment(experiment.name)
+    mlflow.start_run()
+    mlflow.log_param("dataset", args.dataset)
+    mlflow.log_param("engine", args.engine)
+    mlflow.log_param("use_cache", args.use_cache)
 
     kwargs = dict()
     if args.engine is Engines.AMAZON_TRANSCRIBE:
@@ -96,6 +115,9 @@ def main():
             raise ValueError("`watson-speech-to-text-api-key` and `watson-speech-to-text-url` are required")
         kwargs['watson_speech_to_text_api_key'] = args.watson_speech_to_text_api_key
         kwargs['watson_speech_to_text_url'] = args.watson_speech_to_text_url
+    elif args.engine is Engines.WHISPER:
+        kwargs['whisper_language'] = args.whisper_language
+
 
     indices = list(range(dataset.size()))
     random.shuffle(indices)
@@ -103,7 +125,7 @@ def main():
         indices = indices[:args.num_examples]
 
     num_workers = args.num_workers
-
+    mlflow.log_metric("num_workers", num_workers)
     chunk = math.ceil(len(indices) / num_workers)
 
     futures = list()
@@ -115,19 +137,26 @@ def main():
                 engine_params=kwargs,
                 dataset=args.dataset,
                 dataset_folder=args.dataset_folder,
-                indices=indices[i * chunk: (i + 1) * chunk]
+                indices=indices[i * chunk: (i + 1) * chunk],
+                use_cache = args.use_cache
             )
             futures.append(future)
 
     res = [x.result() for x in futures]
 
     num_errors = sum(x.num_errors for x in res)
+    mlflow.log_metric("num_errors", num_errors)
     num_words = sum(x.num_words for x in res)
+    mlflow.log_metric("num_words", num_words)
     rtf = sum(x.rtf for x in res) / len(res)
 
     print(f'WER: {(100 * float(num_errors) / num_words):.2f}')
     print(f'RTF: {rtf}')
 
+    mlflow.log_metric("WER", (100 * float(num_errors) / num_words))
+    mlflow.log_metric("RTF", rtf)
+
+    mlflow.end_run()
 
 if __name__ == '__main__':
     main()

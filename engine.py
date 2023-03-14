@@ -27,10 +27,11 @@ class Engines(Enum):
     MOZILLA_DEEP_SPEECH = 'MOZILLA_DEEP_SPEECH'
     PICOVOICE_CHEETAH = "PICOVOICE_CHEETAH"
     PICOVOICE_LEOPARD = "PICOVOICE_LEOPARD"
+    WHISPER = "WHISPER"
 
 
 class Engine(object):
-    def transcribe(self, path: str) -> str:
+    def transcribe(self, path: str, use_cache: bool) -> str:
         raise NotImplementedError()
 
     def rtf(self) -> float:
@@ -60,6 +61,8 @@ class Engine(object):
             return PicovoiceLeopardEngine(**kwargs)
         elif x is Engines.IBM_WATSON_SPEECH_TO_TEXT:
             return IBMWatsonSpeechToTextEngine(**kwargs)
+        elif x is Engines.WHISPER:
+            return WhisperEngine(**kwargs)
         else:
             raise ValueError(f"Cannot create {cls.__name__} of type `{x}`")
 
@@ -87,10 +90,10 @@ class AmazonTranscribeEngine(Engine):
 
         self._transcribe_client = boto3.client('transcribe')
 
-    def transcribe(self, path: str) -> str:
+    def transcribe(self, path: str, use_cache = True) -> str:
         cache_path = path.replace('.flac', '.aws')
 
-        if os.path.exists(cache_path):
+        if use_cache and os.path.exists(cache_path):
             with open(cache_path) as f:
                 return f.read()
 
@@ -143,10 +146,10 @@ class AzureSpeechToTextEngine(Engine):
         self._azure_speech_key = azure_speech_key
         self._azure_speech_location = azure_speech_location
 
-    def transcribe(self, path: str) -> str:
+    def transcribe(self, path: str, use_cache = True) -> str:
         cache_path = path.replace('.flac', '.ms')
 
-        if os.path.exists(cache_path):
+        if use_cache and os.path.exists(cache_path):
             with open(cache_path, 'r') as f:
                 return f.read()
 
@@ -211,9 +214,9 @@ class GoogleSpeechToTextEngine(Engine):
 
         self._cache_extension = cache_extension
 
-    def transcribe(self, path):
+    def transcribe(self, path, use_cache = True):
         cache_path = path.replace('.flac', self._cache_extension)
-        if os.path.exists(cache_path):
+        if use_cache and os.path.exists(cache_path):
             with open(cache_path) as f:
                 return f.read()
 
@@ -255,9 +258,9 @@ class IBMWatsonSpeechToTextEngine(Engine):
         self._service = SpeechToTextV1(authenticator=IAMAuthenticator(watson_speech_to_text_api_key))
         self._service.set_service_url(watson_speech_to_text_url)
 
-    def transcribe(self, path: str) -> str:
+    def transcribe(self, path: str, use_cache = True) -> str:
         cache_path = path.replace('.flac', '.ibm')
-        if os.path.exists(cache_path):
+        if use_cache and os.path.exists(cache_path):
             with open(cache_path, 'r') as f:
                 return f.read()
 
@@ -296,7 +299,7 @@ class MozillaDeepSpeechEngine(Engine):
         self._audio_sec = 0.
         self._proc_sec = 0.
 
-    def transcribe(self, path: str) -> str:
+    def transcribe(self, path: str, use_cache = True) -> str:
         audio, sample_rate = soundfile.read(path, dtype='int16')
         assert sample_rate == self._model.sampleRate()
         self._audio_sec += audio.size / sample_rate
@@ -323,7 +326,7 @@ class PicovoiceCheetahEngine(Engine):
         self._audio_sec = 0.
         self._proc_sec = 0.
 
-    def transcribe(self, path: str) -> str:
+    def transcribe(self, path: str, use_cache = True) -> str:
         audio, sample_rate = soundfile.read(path, dtype='int16')
         assert sample_rate == self._cheetah.sample_rate
         self._audio_sec += audio.size / sample_rate
@@ -355,7 +358,7 @@ class PicovoiceLeopardEngine(Engine):
         self._audio_sec = 0.
         self._proc_sec = 0.
 
-    def transcribe(self, path: str) -> str:
+    def transcribe(self, path: str, use_cache = True) -> str:
         audio, sample_rate = soundfile.read(path, dtype='int16')
         assert sample_rate == self._leopard.sample_rate
         self._audio_sec += audio.size / sample_rate
@@ -375,5 +378,43 @@ class PicovoiceLeopardEngine(Engine):
     def __str__(self):
         return 'Picovoice Leopard'
 
+
+class WhisperEngine(Engine):
+    def __init__(self, whisper_language: str):
+        self._language = whisper_language
+
+    def transcribe(self, path: str, use_cache = True) -> str:
+        cache_path = path.replace('.flac', '.whisper')
+
+        if use_cache and os.path.exists(cache_path):
+            with open(cache_path, 'r') as f:
+                return f.read()
+        url = 'http://whisper_asr:9000/asr'
+        file = {'audio_file':open(path, 'rb'),'language': self._language}
+        resp = None
+        
+        #while resp is None:
+        #     try:
+        start_sec = time.time()
+        resp = requests.post(url=url, files = file)
+        self._proc_sec += time.time() - start_sec
+        
+            # except requests.exceptions.ConnectionError:
+            #     time.sleep(0.5)
+        res = self._normalize(resp.text)
+        # print the recognized text
+        print("res:", resp.text)
+        with open(cache_path, 'w') as f:
+            f.write(res)
+        return res
+
+    def rtf(self) -> float:
+        return self._proc_sec / self._audio_sec
+
+    def delete(self) -> None:
+        pass
+
+    def __str__(self) -> str:
+        return 'Whisper OpenAI'
 
 __all__ = ['Engines', 'Engine']

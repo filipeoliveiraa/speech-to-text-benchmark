@@ -1,4 +1,13 @@
 # Speech-to-Text Benchmark
+# (UPDATING  - PLEASE CONSIDER THIS IS A FORK FROM PICOVOICE.AI BENCHMARK)
+## Added docker support for modularity
+## Added WHISPER ASR support
+please check https://github.com/ahmetoner/whisper-asr-webservice
+
+## QUiCK START
+docker-compose up -d 
+docker exec -it benchmark /bin/bash
+python3 benchmark.py --dataset LIBRI_SPEECH_TEST_CLEAN --dataset-folder /data/LibriSpeech/test-clean --engine WHISPER --whisper-language en
 
 Made in Vancouver, Canada by [Picovoice](https://picovoice.ai)
 
