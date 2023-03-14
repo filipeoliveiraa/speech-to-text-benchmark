@@ -382,8 +382,12 @@ class PicovoiceLeopardEngine(Engine):
 class WhisperEngine(Engine):
     def __init__(self, whisper_language: str):
         self._language = whisper_language
+        self._audio_sec = 0.
+        self._proc_sec = 0.
 
     def transcribe(self, path: str, use_cache = True) -> str:
+        audio, sample_rate = soundfile.read(path, dtype='int16')
+        self._audio_sec += audio.size / sample_rate
         cache_path = path.replace('.flac', '.whisper')
 
         if use_cache and os.path.exists(cache_path):
