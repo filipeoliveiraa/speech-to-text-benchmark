@@ -5,9 +5,11 @@
 please check https://github.com/ahmetoner/whisper-asr-webservice
 
 ## QUiCK START
+```console
 docker-compose up -d 
 docker exec -it benchmark /bin/bash
 python3 benchmark.py --dataset LIBRI_SPEECH_TEST_CLEAN --dataset-folder /data/LibriSpeech/test-clean --engine WHISPER --whisper-language en
+```
 
 Made in Vancouver, Canada by [Picovoice](https://picovoice.ai)
 
