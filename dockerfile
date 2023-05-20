@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update
 RUN apt-get -y install \
     ffmpeg \
-    python3.10
+    python3.4
 RUN apt-get clean
 
 RUN apt-get -y install \
