@@ -4,6 +4,15 @@
 ## Added WHISPER ASR support
 please check https://github.com/ahmetoner/whisper-asr-webservice
 
+## Requirements
+Docker
+Git
+
+## ONE LINER
+```
+git clone https://github.com/filipeoliveiraa/speech-to-text-benchmark && cd speech-to-text-benchmark && bash run.sh
+```
+
 ## QUiCK START
 ```console
 docker-compose up -d 
