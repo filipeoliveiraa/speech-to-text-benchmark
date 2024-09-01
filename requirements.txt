@@ -13,3 +13,4 @@ pytube
 requests
 soundfile
 mlflow
+gunicorn>=21.2.0 # not directly required, pinned by Snyk to avoid a vulnerability
